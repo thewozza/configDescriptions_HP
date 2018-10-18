@@ -6,6 +6,31 @@ import sys
 import requests
 import time
 
+def getDescription(description):
+    # check to see if this interface already has a description
+    # we don't really want to over-write stuff that's already here
+    
+    # we start off assuming that there's no configuration
+    configuration = False
+    
+    # run through the lines of the interface config
+    for line in description:
+        line = line.strip()    # remove all the leading and following whitespace
+        theWholeLine = line.split()
+        if len(theWholeLine) >=2:
+            key = theWholeLine[0]     # drop the data into variables
+            value = theWholeLine[1]    # drop the data into variables
+        else:
+            continue
+        if "name" in key:
+            # this just tests to see if someone configured some spaces as a name
+            if len(value.strip()) > 0:
+                configuration = value
+        # if we're here, then the config is done and we drop out
+        if "exit" in line:
+            continue
+    return configuration
+
 def MAClookup(MACaddress):
     # lookup the MAC address to see what manufacturer it is
     
@@ -65,11 +90,16 @@ def configDescriptions(switchObject):
     # then we actually configure the interface descriptions
     print "Configuring LLDP neighbor names"
     
+    # assume there is not currently a configuration for the first interface
+    currentDesc = False
+    
     # we roll through the LLDP neighbor dictionary
     for port in LLDPdict:
         # if it a switch connected to this port
         # it will report as a bridge
         if "bridge" in LLDPdict[port]['System Capabilities Enabled']:
+            # check to see if there's already a configuration on this port
+            currentDesc = getDescription(net_connect.send_command("show run int " + port).split('\n'))
             # the output is sometimes weird
             # some values are totally blank so we just roll with it
             # and use alternate values
@@ -78,37 +108,56 @@ def configDescriptions(switchObject):
                 time.sleep(1)
                 # Meraki APs speak LLDP we we mark these ports as WirelessAP
                 if "Meraki MR" in LLDPdict[port]['System Descr']:
-                    interfaceDescription = ["int " + str(port),"name WirelessAP"]
-                    net_connect.send_config_set(interfaceDescription)
-                    # print a dot so the user knows it is working
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
+                    if not currentDesc:
+                        interfaceDescription = ["int " + str(port),"name WirelessAP"]
+                        net_connect.send_config_set(interfaceDescription)
+                        # print a dot so the user knows it is working
+                        sys.stdout.write('.')
+                        sys.stdout.flush()
+                    else:
+                        print "Interface", port, "already has the description", currentDesc
+                        continue
                 else:
-                    # anything else is a switch, so we mark the LLDP hostname of it
-                    interfaceDescription = ["int " + str(port),"name " + str(LLDPdict[port]['System Descr'])]
-                    net_connect.send_config_set(interfaceDescription)
-                    # print a dot so the user knows it is working
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
+                    if not currentDesc:
+                        # anything else is a switch, so we mark the LLDP hostname of it
+                        interfaceDescription = ["int " + str(port),"name " + str(LLDPdict[port]['System Descr'])]
+                        net_connect.send_config_set(interfaceDescription)
+                        # print a dot so the user knows it is working
+                        sys.stdout.write('.')
+                        sys.stdout.flush()
+                    else:
+                        print "Interface", port, "already has the description", currentDesc
+                        continue
             else:
                 time.sleep(1)
                 # Meraki APs speak LLDP we we mark these ports as WirelessAP
                 if "Meraki MR" in LLDPdict[port]['SysName']:
-                    interfaceDescription = ["int " + str(port),"name WirelessAP"]
-                    net_connect.send_config_set(interfaceDescription)
-                    # print a dot so the user knows it is working
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
+                    if not currentDesc:
+                        interfaceDescription = ["int " + str(port),"name WirelessAP"]
+                        net_connect.send_config_set(interfaceDescription)
+                        # print a dot so the user knows it is working
+                        sys.stdout.write('.')
+                        sys.stdout.flush()
+                    else:
+                        print "Interface", port, "already has the description", currentDesc
+                        continue
                 else:
-                    # anything else is a switch, so we mark the LLDP hostname of it
-                    interfaceDescription = ["int " + str(port),"name " + str(LLDPdict[port]['SysName'])]
-                    net_connect.send_config_set(interfaceDescription)
-                    # print a dot so the user knows it is working
-                    sys.stdout.write('.')
-                    sys.stdout.flush()
+                    if not currentDesc:
+                        # anything else is a switch, so we mark the LLDP hostname of it
+                        interfaceDescription = ["int " + str(port),"name " + str(LLDPdict[port]['SysName'])]
+                        net_connect.send_config_set(interfaceDescription)
+                        # print a dot so the user knows it is working
+                        sys.stdout.write('.')
+                        sys.stdout.flush()
+                    else:
+                        print "Interface", port, "already has the description", currentDesc
+                        continue
     
     # print a newline so it looks nice
     print ""
+    
+    # assume there is not currently a configuration for the first interface
+    currentDesc = False
     
     # next we grab the MAC table
     showMACcommand = "show mac-address"
@@ -143,14 +192,19 @@ def configDescriptions(switchObject):
                     uplink = True
                 # if we get this far then it is something worth looking at
                 if not uplink:
-                    # if the manufacturer is Ubiquiti then it is an AP and we configure that in the description
-                    if "Ubiquiti" in MAClookup(MAC):
-                        time.sleep(1)
-                        interfaceDescription = ["int " + str(MACport),"name WirelessAP"]
-                        net_connect.send_config_set(interfaceDescription)
-                        # print a dot so the user knows it is working
-                        sys.stdout.write('.')
-                        sys.stdout.flush()
+                        # if the manufacturer is Ubiquiti then it is an AP and we configure that in the description
+                        if "Ubiquiti" in MAClookup(MAC):
+                            currentDesc = getDescription(net_connect.send_command("show run int " + MACport).split('\n'))
+                            if not currentDesc:
+                                time.sleep(1)
+                                interfaceDescription = ["int " + str(MACport),"name WirelessAP"]
+                                net_connect.send_config_set(interfaceDescription)
+                                # print a dot so the user knows it is working
+                                sys.stdout.write('.')
+                                sys.stdout.flush()
+                            else:
+                                print "Interface", MACport, "already has the description", currentDesc
+                                continue
             # this means the actual MAC addresses are coming up
             if "----" in line:
                 addressesNext = True
