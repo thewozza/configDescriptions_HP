@@ -1,0 +1,2 @@
+Switch,IP,username,password
+SWITCH_HOSTNAME,10.10.10.10,theusername,supersecretpassword
